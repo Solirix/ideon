@@ -1,47 +1,54 @@
-FROM node:24.11-alpine AS deps
-RUN apk add --no-cache libc6-compat python3 make g++
+FROM node:24.11-alpine AS base
+RUN apk add --no-cache libc6-compat
+
+# 1. Install all dependencies (for building)
+FROM base AS deps
+RUN apk add --no-cache python3 make g++
 WORKDIR /app
 COPY package.json package-lock.json ./
-# Mount cache to speed up subsequent builds
 RUN --mount=type=cache,target=/root/.npm npm ci
 
-FROM node:24.11-alpine AS builder
+# 2. Install production dependencies (for running)
+FROM base AS prod-deps
+RUN apk add --no-cache python3 make g++
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN --mount=type=cache,target=/root/.npm npm ci --omit=dev
+
+# 3. Build the application
+FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NODE_ENV=production
 RUN IS_NEXT_BUILD=1 npm run build
+RUN rm -rf .next/standalone .next/cache
 
-FROM node:24.11-alpine AS prod-deps
-WORKDIR /app
-COPY package.json package-lock.json ./
-# Reuse built modules from deps and prune dev dependencies
-COPY --from=deps /app/node_modules ./node_modules
-RUN npm prune --omit=dev
-
-FROM node:24.11-alpine AS runner
+# Production image, copy all the files and run next
+FROM base AS runner
 WORKDIR /app
 
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 ENV NODE_OPTIONS='--max-old-space-size=8192'
 ENV HOSTNAME="0.0.0.0"
-
-RUN apk add --no-cache curl
-
+# Install tini for better signal handling and curl for healthchecks
+RUN apk add --no-cache curl tini
 RUN adduser -D -u 1001 appuser && \
     mkdir -p storage/avatars storage/yjs storage/uploads && \
     chown -R appuser:appuser storage
-
-COPY --from=prod-deps /app/node_modules ./node_modules
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/.next ./.next
-COPY --from=builder /app/public ./public
-COPY --from=builder /app/package.json ./package.json
-COPY --from=builder /app/src/app/i18n ./src/app/i18n
+# Copy pruned node_modules from prod-deps
+COPY --from=prod-deps --chown=appuser:appuser /app/node_modules ./node_modules
+# Copy build artifacts
+COPY --from=builder --chown=appuser:appuser /app/dist ./dist
+COPY --from=builder --chown=appuser:appuser /app/.next ./.next
+COPY --from=builder --chown=appuser:appuser /app/public ./public
+COPY --from=builder --chown=appuser:appuser /app/package.json ./package.json
+COPY --from=builder --chown=appuser:appuser /app/src/app/i18n ./src/app/i18n
 
 USER appuser
 EXPOSE 3000
 
-# Run node directly for better signal handling
+# Use tini as entrypoint for proper signal forwarding
+ENTRYPOINT ["/sbin/tini", "--"]
 CMD ["node", "dist/server.cjs"]

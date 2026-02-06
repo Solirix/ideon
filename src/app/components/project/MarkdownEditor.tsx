@@ -38,6 +38,7 @@ const MarkdownEditor = ({
   onBlur,
 }: MarkdownEditorProps) => {
   const [, setIsFocused] = useState(false);
+  const isSyncingRef = React.useRef(false);
 
   // Type definition for Markdown storage
   interface MarkdownStorage {
@@ -66,6 +67,7 @@ const MarkdownEditor = ({
       },
     },
     onUpdate: ({ editor }) => {
+      if (isSyncingRef.current) return;
       const markdown = (
         editor.storage as unknown as MarkdownStorage
       ).markdown.getMarkdown();
@@ -89,7 +91,11 @@ const MarkdownEditor = ({
       ).markdown.getMarkdown();
       if (content !== currentMarkdown) {
         if (!editor.isFocused || editor.isEmpty) {
+          isSyncingRef.current = true;
           editor.commands.setContent(content);
+          setTimeout(() => {
+            isSyncingRef.current = false;
+          }, 0);
         }
       }
     }

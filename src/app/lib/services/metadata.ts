@@ -1,4 +1,4 @@
-import ogs from "open-graph-scraper";
+import { parse } from "node-html-parser";
 import { validateSafeUrl } from "@lib/ssrf";
 
 export interface LinkMetadata {
@@ -22,12 +22,53 @@ export async function fetchLinkMetadata(url: string): Promise<LinkMetadata> {
       throw new Error("Invalid or restricted URL");
     }
 
-    const { result } = await ogs({ url: targetUrl });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+
+    const response = await fetch(targetUrl, {
+      signal: controller.signal,
+      headers: {
+        "User-Agent": "Ideon/0.1.0 (Link Preview)",
+      },
+    });
+
+    clearTimeout(timeoutId);
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch ${targetUrl}: ${response.status}`);
+    }
+
+    const html = await response.text();
+    const root = parse(html);
+
+    const getMeta = (prop: string) => {
+      return (
+        root
+          .querySelector(`meta[property="${prop}"]`)
+          ?.getAttribute("content") ||
+        root.querySelector(`meta[name="${prop}"]`)?.getAttribute("content")
+      );
+    };
+
+    const title =
+      getMeta("og:title") ||
+      getMeta("twitter:title") ||
+      root.querySelector("title")?.textContent ||
+      "";
+
+    const description =
+      getMeta("og:description") ||
+      getMeta("twitter:description") ||
+      getMeta("description") ||
+      "";
+
+    const image =
+      getMeta("og:image") || getMeta("twitter:image") || getMeta("image") || "";
 
     return {
-      title: result.ogTitle || result.twitterTitle || "",
-      description: result.ogDescription || result.twitterDescription || "",
-      image: result.ogImage?.[0]?.url || result.twitterImage?.[0]?.url || "",
+      title,
+      description,
+      image,
       favicon: `https://www.google.com/s2/favicons?domain=${
         new URL(targetUrl).hostname
       }&sz=64`,

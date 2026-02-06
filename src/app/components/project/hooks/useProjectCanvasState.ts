@@ -947,6 +947,43 @@ export const useProjectCanvasState = (
     [getZoom, zoomTo],
   );
 
+  const onViewportChange = useCallback(
+    (v: { x: number; y: number; zoom: number }) => {
+      setZoom(Math.round(v.zoom * 100));
+    },
+    [],
+  );
+
+  const onMove = useCallback(() => {
+    setZoom(Math.round(getZoom() * 100));
+  }, [getZoom]);
+
+  const handleToggleLock = useCallback(
+    (blockId: string) => {
+      const block = blocks.find((b) => b.id === blockId);
+      if (!block || !currentUser) return;
+      const isLocked = !!block.data?.isLocked;
+      graph.handleToggleLock(blockId, !isLocked);
+    },
+    [blocks, currentUser, graph],
+  );
+
+  const handleTransferBlock = useCallback(
+    (
+      id: string,
+      target: {
+        id: string;
+        username: string | null;
+        displayName: string | null;
+        color?: string;
+      },
+    ) => {
+      graph.handleTransferBlock(id, target);
+      toast.success(dict.common.blockTransferred);
+    },
+    [graph, dict.common],
+  );
+
   const onKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
       const target = e.target as HTMLElement;
@@ -1066,9 +1103,8 @@ export const useProjectCanvasState = (
     handleFitView,
     handleZoomIn,
     handleZoomOut,
-    onViewportChange: (v: { x: number; y: number; zoom: number }) =>
-      setZoom(Math.round(v.zoom * 100)),
-    onMove: () => setZoom(Math.round(getZoom() * 100)),
+    onViewportChange,
+    onMove,
     fetchGraph: io.fetchGraph,
     handleSaveState,
     handleDeleteState,
@@ -1078,24 +1114,8 @@ export const useProjectCanvasState = (
     onBlockDragStop: graph.onBlockDragStop,
     onConnect: graph.onConnect,
     handleDeleteBlock: graph.handleDeleteBlock,
-    handleToggleLock: (blockId: string) => {
-      const block = blocks.find((b) => b.id === blockId);
-      if (!block || !currentUser) return;
-      const isLocked = !!block.data?.isLocked;
-      graph.handleToggleLock(blockId, !isLocked);
-    },
-    handleTransferBlock: (
-      id: string,
-      target: {
-        id: string;
-        username: string | null;
-        displayName: string | null;
-        color?: string;
-      },
-    ) => {
-      graph.handleTransferBlock(id, target);
-      toast.success(dict.common.blockTransferred);
-    },
+    handleToggleLock,
+    handleTransferBlock,
     confirmDelete,
     onKeyDown,
     onPointerMove,

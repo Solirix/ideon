@@ -56,10 +56,13 @@ export function VersionBadge({ currentVersion }: VersionBadgeProps) {
     >
       <span className="version-text">v{currentVersion.replace(/^v/, "")}</span>
       <span className={`version-dot ${hasUpdate ? "update" : "latest"}`} />
-      
+
       <div className="version-tooltip">
         {hasUpdate
-          ? dict.system.updateAvailable.replace("{version}", latestVersion || "")
+          ? dict.system.updateAvailable.replace(
+              "{version}",
+              latestVersion || "",
+            )
           : dict.system.upToDate}
         <div className="version-tooltip-arrow" />
       </div>

@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import ogs from "open-graph-scraper";
-import { validateSafeUrl } from "@lib/ssrf";
+import { fetchLinkMetadata } from "@lib/services/metadata";
 
 export async function POST(req: Request) {
   try {
@@ -10,33 +9,12 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "URL is required" }, { status: 400 });
     }
 
-    const targetUrl = url.startsWith("http") ? url : `https://${url}`;
-
-    // SSRF Protection: Validate DNS and IP before fetching
-    const isSafe = await validateSafeUrl(targetUrl);
-    if (!isSafe) {
-      return NextResponse.json(
-        { error: "Invalid or restricted URL" },
-        { status: 403 },
-      );
-    }
-
-    const options = {
-      url: targetUrl,
-      fetchOptions: {
-        headers: {
-          "user-agent":
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-        },
-      },
-      timeout: 5000,
-    };
-    const { result } = await ogs(options);
+    const metadata = await fetchLinkMetadata(url);
 
     return NextResponse.json({
-      title: result.ogTitle || result.twitterTitle || "",
-      description: result.ogDescription || result.twitterDescription || "",
-      image: result.ogImage?.[0]?.url || result.twitterImage?.[0]?.url || "",
+      title: metadata.title,
+      description: metadata.description,
+      image: metadata.image,
     });
   } catch (_error) {
     // Silence 429/403/500 errors to prevent frontend retries and console noise
